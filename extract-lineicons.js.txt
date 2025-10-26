@@ -1,0 +1,83 @@
+const fs = require("fs");
+const path = require("path");
+
+// ---- Tunables / defaults ----
+const ICON_ROOT = path.join(__dirname, "src"); // adjust if icons live deeper
+const OUTPUT_FILE = path.join(__dirname, "lineicons.json");
+
+// Lineicons global visual style (you can edit this once and reuse)
+const STYLE_PROMPT = "24px line icon, ~1.5px stroke, consistent stroke weight, rounded corners, balanced negative space, monochrome SVG, production-ready for dashboards and apps. Lineicons V5 style.";
+
+// naive helpers to guess category & tags from filename
+function guessCategory(name) {
+  if (name.includes("file") || name.includes("folder")) return "files";
+  if (name.includes("cart") || name.includes("credit") || name.includes("card"))
+    return "ecommerce";
+  if (name.includes("home") || name.includes("apartment"))
+    return "real-estate";
+  if (name.includes("cloud") || name.includes("bolt"))
+    return "weather";
+  if (name.includes("user") || name.includes("profile"))
+    return "user";
+  return "ui";
+}
+
+function guessTags(name) {
+  return name
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map(t => t.toLowerCase());
+}
+
+// build description from filename
+function buildDescription(name) {
+  // "add-file" -> "Add file"
+  const base = name
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+// walk the src directory recursively and collect *.svg
+function getAllSvgFiles(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...getAllSvgFiles(full));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".svg")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function buildIconRecord(filePath) {
+  const svg = fs.readFileSync(filePath, "utf8").trim();
+
+  const baseName = path.basename(filePath, ".svg"); // e.g. "add-file"
+  const record = {
+    name: baseName,
+    description: buildDescription(baseName), // human-readable
+    style_prompt: STYLE_PROMPT,
+    svg_content: svg,
+    tags: guessTags(baseName),
+    category: guessCategory(baseName),
+    use_case: `Icon for ${buildDescription(baseName)} in product UI.`,
+    source: "Lineicons (Free)",
+    rating: 5
+  };
+
+  return record;
+}
+
+// main
+const svgFiles = getAllSvgFiles(ICON_ROOT);
+const icons = svgFiles.map(buildIconRecord);
+
+// Write pretty JSON
+fs.writeFileSync(OUTPUT_FILE, JSON.stringify(icons, null, 2), "utf8");
+
+console.log(
+  `Extracted ${icons.length} icons to ${OUTPUT_FILE}`
+);
